@@ -1,0 +1,54 @@
+From 14f8a622d5af7837a0062cf17eda870fc82df44f Mon Sep 17 00:00:00 2001
+From: Gerd Hoffmann <kraxel@redhat.com>
+Date: Wed, 24 Mar 2010 13:48:06 +0100
+Subject: [PATCH 4/4] new libspice api: add spice_server_{get, set}_playback_compression #571286
+
+Add functions to enable/disable playback compression.
+
+Signed-off-by: Gerd Hoffmann <kraxel@redhat.com>
+---
+ server/reds.c  |   13 +++++++++++++
+ server/spice.h |    3 +++
+ 2 files changed, 16 insertions(+), 0 deletions(-)
+
+diff --git a/server/reds.c b/server/reds.c
+index ae74686..eb77902 100644
+--- a/server/reds.c
++++ b/server/reds.c
+@@ -5643,6 +5643,19 @@ int spice_server_get_streaming_video(SpiceServer *s)
+     return streaming_video;
+ }
+
++int spice_server_set_playback_compression(SpiceServer *s, int enable)
++{
++    ASSERT(reds == s);
++    snd_set_playback_compression(enable);
++    return 0;
++}
++
++int spice_server_get_playback_compression(SpiceServer *s)
++{
++    ASSERT(reds == s);
++    return snd_get_playback_compression();
++}
++
+ int spice_server_set_channel_security(SpiceServer *s,
+                                       spice_channel_t channel,
+                                       int security)
+diff --git a/server/spice.h b/server/spice.h
+index e70bb3a..5df994d 100644
+--- a/server/spice.h
++++ b/server/spice.h
+@@ -104,6 +104,9 @@ enum {
+ int spice_server_set_streaming_video(SpiceServer *s, int value);
+ int spice_server_get_streaming_video(SpiceServer *s);
+
++int spice_server_set_playback_compression(SpiceServer *s, int enable);
++int spice_server_get_playback_compression(SpiceServer *s);
++
+ /*
+  * setting information about the migration destination.
+  * For null port use -1.
+-- 
+1.6.6.1
+

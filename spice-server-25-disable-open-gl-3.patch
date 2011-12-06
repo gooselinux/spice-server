@@ -1,0 +1,102 @@
+From e6132cb52f2d9b5b4200a2899be6045a556d95b4 Mon Sep 17 00:00:00 2001
+From: Uri Lublin <uril@redhat.com>
+Date: Wed, 30 Jun 2010 06:33:29 -0400
+Subject: [PATCH] server: disable open-gl: add missing ifdef USE_OGL #482556
+
+---
+ server/red_dispatcher.c |    5 ++++-
+ server/red_worker.c     |    6 ++++++
+ server/reds.c           |    4 ++++
+ 3 files changed, 14 insertions(+), 1 deletions(-)
+
+diff --git a/server/red_dispatcher.c b/server/red_dispatcher.c
+index 2e8b1a4..c165a2e 100644
+--- a/server/red_dispatcher.c
++++ b/server/red_dispatcher.c
+@@ -29,7 +29,9 @@
+ #include "red_worker.h"
+ #include "quic.h"
+ #include "cairo_canvas.h"
++#ifdef USE_OGL
+ #include "gl_canvas.h"
++#endif /* USE_OGL */
+ #include "reds.h"
+ #include "red_dispatcher.h"
+ 
+@@ -408,8 +410,9 @@ RedDispatcher *red_dispatcher_init(QXLInterface *qxl_interface)
+ 
+     quic_init();
+     cairo_canvas_init();
++#ifdef USE_OGL
+     gl_canvas_init();
+-
++#endif /* USE_OGL */
+     if (socketpair(AF_LOCAL, SOCK_STREAM, 0, channels) == -1) {
+         red_error("socketpair failed %s", strerror(errno));
+     }
+diff --git a/server/red_worker.c b/server/red_worker.c
+index 93e228d..87b086e 100644
+--- a/server/red_worker.c
++++ b/server/red_worker.c
+@@ -37,8 +37,10 @@
+ #include "red_worker.h"
+ #include "cairo.h"
+ #include "cairo_canvas.h"
++#ifdef USE_OGL
+ #include "gl_canvas.h"
+ #include "ogl_ctx.h"
++#endif /* USE_OGL */
+ #include "ffmpeg_inc.h"
+ #include "quic.h"
+ #include "lz.h"
+@@ -7104,6 +7106,7 @@ static int create_cairo_context(RedWorker *worker)
+     return TRUE;
+ }
+ 
++#ifdef USE_OGL
+ static void destroy_gl_canvas(GLCanvas *canvas)
+ {
+     OGLCtx *ctx;
+@@ -7211,6 +7214,7 @@ static int create_ogl_pixmap_context(RedWorker *worker)
+ 
+     return TRUE;
+ }
++#endif /* USE_OGL */
+ 
+ static void red_create_draw_context(RedWorker *worker)
+ {
+@@ -7225,6 +7229,7 @@ static void red_create_draw_context(RedWorker *worker)
+                 return;
+             }
+             break;
++#ifdef USE_OGL
+         case RED_RENDERER_OGL_PBUF:
+             if (create_ogl_pbuf_context(worker)) {
+                 return;
+@@ -7235,6 +7240,7 @@ static void red_create_draw_context(RedWorker *worker)
+                 return;
+             }
+             break;
++#endif /* USE_OGL */
+         default:
+             red_error("invalid renderer type");
+         }
+diff --git a/server/reds.c b/server/reds.c
+index eb77902..a3c91d0 100644
+--- a/server/reds.c
++++ b/server/reds.c
+@@ -4128,7 +4128,11 @@ const char *spice_usage_str[] __attribute__ ((visibility ("default"))) = {
+     "[,ic=on|auto_glz|auto_lz|quic|glz|lz|off]",
+     "[,playback-compression=on|off]",
+     "[,password=password][,disable-ticketing]",
++#ifdef USE_OGL
+     "[,renderer=oglpbuf+oglpixmap+cairo]",
++#else  /* USE_OGL */
++    "[,renderer=cairo]",
++#endif /* USE_OGL */
+     "[,sslkeys=key directory,sslcerts=certs directory,sslpassword=pem password,",
+     "                                              sslciphersuite=cipher suite]",
+     "[,secure-channels=all|channel+channel+...]",
+-- 
+1.7.1
+

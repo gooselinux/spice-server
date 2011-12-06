@@ -1,0 +1,68 @@
+From 1d518986441586a6c050a463392246dc1cd253ce Mon Sep 17 00:00:00 2001
+From: Uri Lublin <uril@redhat.com>
+Date: Tue, 29 Jun 2010 19:41:17 -0400
+Subject: [PATCH] spice server: disable Open GL #482556
+
+update server/Makefile.am to not compile Open GL files if Open GL
+is disabled.
+
+ifdef out (USE_OGL) Open GL 'renderer' spice options.
+
+Note that by default Open GL is disabled (and USE_OGL undefined).
+---
+ server/Makefile.am      |   16 +++++++++++++---
+ server/red_dispatcher.c |    2 ++
+ 2 files changed, 15 insertions(+), 3 deletions(-)
+
+diff --git a/server/Makefile.am b/server/Makefile.am
+index 3a397c9..ca68b40 100644
+--- a/server/Makefile.am
++++ b/server/Makefile.am
+@@ -19,16 +19,26 @@ INCLUDES = \
+
+ COMMON_SRCS = 				 	\
+ 	$(COMMON_DIR)/cairo_canvas.c		\
+-	$(COMMON_DIR)/gl_canvas.c			\
+ 	$(COMMON_DIR)/region.c			\
+-	$(COMMON_DIR)/glc.c				\
+-	$(COMMON_DIR)/ogl_ctx.c			\
+ 	$(COMMON_DIR)/rop3.c			\
+ 	$(COMMON_DIR)/quic.c			\
+ 	$(COMMON_DIR)/lz.c				\
+ 	$(COMMON_DIR)/canvas_utils.c		\
++	$(COMMON_OGL_SRCS)			\
+ 	$(NULL)
+
++if SUPPORT_GL
++GL_CFLAGS=-DGL_GLEXT_PROTOTYPES -DUSE_OGL
++COMMON_OGL_SRCS =					\
++	$(COMMON_DIR)/gl_canvas.c			\
++	$(COMMON_DIR)/glc.c				\
++	$(COMMON_DIR)/ogl_ctx.c
++else
++GL_CFLAGS=
++COMMON_OGL_SRCS =
++endif
++
++
+ lib_LTLIBRARIES = libspice-server.la
+
+ libspice_server_la_LDFLAGS =			\
+diff --git a/server/red_dispatcher.c b/server/red_dispatcher.c
+index 19da665..2e8b1a4 100644
+--- a/server/red_dispatcher.c
++++ b/server/red_dispatcher.c
+@@ -132,8 +132,10 @@ typedef struct RendererInfo {
+
+ static RendererInfo renderers_info[] = {
+     {RED_RENDERER_CAIRO, "cairo"},
++#ifdef USE_OGL
+     {RED_RENDERER_OGL_PBUF, "oglpbuf"},
+     {RED_RENDERER_OGL_PIXMAP, "oglpixmap"},
++#endif
+     {RED_RENDERER_INVALID, NULL},
+ };
+
+-- 
+1.7.0.1
+

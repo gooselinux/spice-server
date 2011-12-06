@@ -1,0 +1,222 @@
+From ebcc3ab21f41ea2d251d155951bf590dca039eb9 Mon Sep 17 00:00:00 2001
+From: Uri Lublin <uril@redhat.com>
+Date: Wed, 24 Mar 2010 10:55:45 +0200
+Subject: [PATCH 2/2] spice server: renaming library -- Makefile.in changes
+
+---
+ server/Makefile.in |   91 +++++++++++++++++++++++++++------------------------
+ 1 files changed, 48 insertions(+), 43 deletions(-)
+
+diff --git a/server/Makefile.in b/server/Makefile.in
+index 8af2000..51037ed 100644
+--- a/server/Makefile.in
++++ b/server/Makefile.in
+@@ -37,12 +37,13 @@ POST_UNINSTALL = :
+ build_triplet = @build@
+ host_triplet = @host@
+ subdir = .
+-DIST_COMMON = README $(am__configure_deps) $(libspiceinclude_HEADERS) \
+-	$(srcdir)/Makefile.am $(srcdir)/Makefile.in \
+-	$(srcdir)/config.h.in $(srcdir)/ffmpeg_inc.h.in \
+-	$(srcdir)/spice-server.pc.in $(top_srcdir)/configure AUTHORS \
+-	COPYING ChangeLog INSTALL NEWS compile config.guess config.sub \
+-	depcomp install-sh ltmain.sh missing
++DIST_COMMON = README $(am__configure_deps) \
++	$(libspice_serverinclude_HEADERS) $(srcdir)/Makefile.am \
++	$(srcdir)/Makefile.in $(srcdir)/config.h.in \
++	$(srcdir)/ffmpeg_inc.h.in $(srcdir)/spice-server.pc.in \
++	$(top_srcdir)/configure AUTHORS COPYING ChangeLog INSTALL NEWS \
++	compile config.guess config.sub depcomp install-sh ltmain.sh \
++	missing
+ ACLOCAL_M4 = $(top_srcdir)/aclocal.m4
+ am__aclocal_m4_deps = $(top_srcdir)/configure.ac.shared \
+ 	$(top_srcdir)/../configure.ac.shared \
+@@ -77,26 +78,26 @@ am__base_list = \
+   sed '$$!N;$$!N;$$!N;$$!N;$$!N;$$!N;$$!N;s/\n/ /g' | \
+   sed '$$!N;$$!N;$$!N;$$!N;s/\n/ /g'
+ am__installdirs = "$(DESTDIR)$(libdir)" "$(DESTDIR)$(pkgconfigdir)" \
+-	"$(DESTDIR)$(libspiceincludedir)"
++	"$(DESTDIR)$(libspice_serverincludedir)"
+ LTLIBRARIES = $(lib_LTLIBRARIES)
+ am__DEPENDENCIES_1 =
+-libspice_la_DEPENDENCIES = $(am__DEPENDENCIES_1) $(am__DEPENDENCIES_1) \
++libspice_server_la_DEPENDENCIES = $(am__DEPENDENCIES_1) \
+ 	$(am__DEPENDENCIES_1) $(am__DEPENDENCIES_1) \
+ 	$(am__DEPENDENCIES_1) $(am__DEPENDENCIES_1) \
+-	$(am__DEPENDENCIES_1)
++	$(am__DEPENDENCIES_1) $(am__DEPENDENCIES_1)
+ am__objects_1 =
+-am_libspice_la_OBJECTS = glz_encoder.lo glz_encoder_dictionary.lo \
+-	red_dispatcher.lo reds.lo red_worker.lo snd_worker.lo \
+-	$(am__objects_1)
++am_libspice_server_la_OBJECTS = glz_encoder.lo \
++	glz_encoder_dictionary.lo red_dispatcher.lo reds.lo \
++	red_worker.lo snd_worker.lo $(am__objects_1)
+ am__objects_2 = cairo_canvas.lo gl_canvas.lo region.lo glc.lo \
+ 	ogl_ctx.lo rop3.lo quic.lo lz.lo canvas_utils.lo \
+ 	$(am__objects_1)
+-nodist_libspice_la_OBJECTS = $(am__objects_2)
+-libspice_la_OBJECTS = $(am_libspice_la_OBJECTS) \
+-	$(nodist_libspice_la_OBJECTS)
+-libspice_la_LINK = $(LIBTOOL) --tag=CC $(AM_LIBTOOLFLAGS) \
++nodist_libspice_server_la_OBJECTS = $(am__objects_2)
++libspice_server_la_OBJECTS = $(am_libspice_server_la_OBJECTS) \
++	$(nodist_libspice_server_la_OBJECTS)
++libspice_server_la_LINK = $(LIBTOOL) --tag=CC $(AM_LIBTOOLFLAGS) \
+ 	$(LIBTOOLFLAGS) --mode=link $(CCLD) $(AM_CFLAGS) $(CFLAGS) \
+-	$(libspice_la_LDFLAGS) $(LDFLAGS) -o $@
++	$(libspice_server_la_LDFLAGS) $(LDFLAGS) -o $@
+ DEFAULT_INCLUDES = -I.@am__isrc@
+ depcomp = $(SHELL) $(top_srcdir)/depcomp
+ am__depfiles_maybe = depfiles
+@@ -110,10 +111,11 @@ CCLD = $(CC)
+ LINK = $(LIBTOOL) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) \
+ 	--mode=link $(CCLD) $(AM_CFLAGS) $(CFLAGS) $(AM_LDFLAGS) \
+ 	$(LDFLAGS) -o $@
+-SOURCES = $(libspice_la_SOURCES) $(nodist_libspice_la_SOURCES)
+-DIST_SOURCES = $(libspice_la_SOURCES)
++SOURCES = $(libspice_server_la_SOURCES) \
++	$(nodist_libspice_server_la_SOURCES)
++DIST_SOURCES = $(libspice_server_la_SOURCES)
+ DATA = $(pkgconfig_DATA)
+-HEADERS = $(libspiceinclude_HEADERS)
++HEADERS = $(libspice_serverinclude_HEADERS)
+ ETAGS = etags
+ CTAGS = ctags
+ DISTFILES = $(DIST_COMMON) $(DIST_SOURCES) $(TEXINFOS) $(EXTRA_DIST)
+@@ -302,13 +304,13 @@ COMMON_SRCS = \
+ 	$(COMMON_DIR)/canvas_utils.c		\
+ 	$(NULL)
+
+-lib_LTLIBRARIES = libspice.la
+-libspice_la_LDFLAGS = \
++lib_LTLIBRARIES = libspice-server.la
++libspice_server_la_LDFLAGS = \
+ 	-version-number $(SPICE_LT_VERSION)	\
+ 	-no-undefined				\
+ 	$(NULL)
+
+-libspice_la_LIBADD = \
++libspice_server_la_LIBADD = \
+ 	$(GL_LIBS)				\
+ 	$(FFMPEG_LIBS)				\
+ 	$(QCAIRO_LIBS)				\
+@@ -317,7 +319,7 @@ libspice_la_LIBADD = \
+ 	$(LIBRT)				\
+ 	$(NULL)
+
+-libspice_la_SOURCES = \
++libspice_server_la_SOURCES = \
+ 	glz_encoder.c				\
+ 	glz_encoder_config.h			\
+ 	glz_encoder_dictionary.c		\
+@@ -342,9 +344,9 @@ libspice_la_SOURCES = \
+ 	vd_interface.h				\
+ 	$(NULL)
+
+-nodist_libspice_la_SOURCES = $(COMMON_SRCS)
+-libspiceincludedir = $(includedir)/libspice
+-libspiceinclude_HEADERS = \
++nodist_libspice_server_la_SOURCES = $(COMMON_SRCS)
++libspice_serverincludedir = $(includedir)/spice-server
++libspice_serverinclude_HEADERS = \
+ 	spice.h					\
+ 	vd_interface.h				\
+ 	$(NULL)
+@@ -452,8 +454,8 @@ clean-libLTLIBRARIES:
+ 	  echo "rm -f \"$${dir}/so_locations\""; \
+ 	  rm -f "$${dir}/so_locations"; \
+ 	done
+-libspice.la: $(libspice_la_OBJECTS) $(libspice_la_DEPENDENCIES) 
+-	$(libspice_la_LINK) -rpath $(libdir) $(libspice_la_OBJECTS) $(libspice_la_LIBADD) $(LIBS)
++libspice-server.la: $(libspice_server_la_OBJECTS) $(libspice_server_la_DEPENDENCIES) 
++	$(libspice_server_la_LINK) -rpath $(libdir) $(libspice_server_la_OBJECTS) $(libspice_server_la_LIBADD) $(LIBS)
+
+ mostlyclean-compile:
+ 	-rm -f *.$(OBJEXT)
+@@ -589,26 +591,26 @@ uninstall-pkgconfigDATA:
+ 	test -n "$$files" || exit 0; \
+ 	echo " ( cd '$(DESTDIR)$(pkgconfigdir)' && rm -f" $$files ")"; \
+ 	cd "$(DESTDIR)$(pkgconfigdir)" && rm -f $$files
+-install-libspiceincludeHEADERS: $(libspiceinclude_HEADERS)
++install-libspice_serverincludeHEADERS: $(libspice_serverinclude_HEADERS)
+ 	@$(NORMAL_INSTALL)
+-	test -z "$(libspiceincludedir)" || $(MKDIR_P) "$(DESTDIR)$(libspiceincludedir)"
+-	@list='$(libspiceinclude_HEADERS)'; test -n "$(libspiceincludedir)" || list=; \
++	test -z "$(libspice_serverincludedir)" || $(MKDIR_P) "$(DESTDIR)$(libspice_serverincludedir)"
++	@list='$(libspice_serverinclude_HEADERS)'; test -n "$(libspice_serverincludedir)" || list=; \
+ 	for p in $$list; do \
+ 	  if test -f "$$p"; then d=; else d="$(srcdir)/"; fi; \
+ 	  echo "$$d$$p"; \
+ 	done | $(am__base_list) | \
+ 	while read files; do \
+-	  echo " $(INSTALL_HEADER) $$files '$(DESTDIR)$(libspiceincludedir)'"; \
+-	  $(INSTALL_HEADER) $$files "$(DESTDIR)$(libspiceincludedir)" || exit $$?; \
++	  echo " $(INSTALL_HEADER) $$files '$(DESTDIR)$(libspice_serverincludedir)'"; \
++	  $(INSTALL_HEADER) $$files "$(DESTDIR)$(libspice_serverincludedir)" || exit $$?; \
+ 	done
+
+-uninstall-libspiceincludeHEADERS:
++uninstall-libspice_serverincludeHEADERS:
+ 	@$(NORMAL_UNINSTALL)
+-	@list='$(libspiceinclude_HEADERS)'; test -n "$(libspiceincludedir)" || list=; \
++	@list='$(libspice_serverinclude_HEADERS)'; test -n "$(libspice_serverincludedir)" || list=; \
+ 	files=`for p in $$list; do echo $$p; done | sed -e 's|^.*/||'`; \
+ 	test -n "$$files" || exit 0; \
+-	echo " ( cd '$(DESTDIR)$(libspiceincludedir)' && rm -f" $$files ")"; \
+-	cd "$(DESTDIR)$(libspiceincludedir)" && rm -f $$files
++	echo " ( cd '$(DESTDIR)$(libspice_serverincludedir)' && rm -f" $$files ")"; \
++	cd "$(DESTDIR)$(libspice_serverincludedir)" && rm -f $$files
+
+ ID: $(HEADERS) $(SOURCES) $(LISP) $(TAGS_FILES)
+ 	list='$(SOURCES) $(HEADERS) $(LISP) $(TAGS_FILES)'; \
+@@ -816,7 +818,7 @@ check-am: all-am
+ check: check-am
+ all-am: Makefile $(LTLIBRARIES) $(DATA) $(HEADERS) config.h
+ installdirs:
+-	for dir in "$(DESTDIR)$(libdir)" "$(DESTDIR)$(pkgconfigdir)" "$(DESTDIR)$(libspiceincludedir)"; do \
++	for dir in "$(DESTDIR)$(libdir)" "$(DESTDIR)$(pkgconfigdir)" "$(DESTDIR)$(libspice_serverincludedir)"; do \
+ 	  test -z "$$dir" || $(MKDIR_P) "$$dir"; \
+ 	done
+ install: install-am
+@@ -869,7 +871,8 @@ info: info-am
+
+ info-am:
+
+-install-data-am: install-libspiceincludeHEADERS install-pkgconfigDATA
++install-data-am: install-libspice_serverincludeHEADERS \
++	install-pkgconfigDATA
+
+ install-dvi: install-dvi-am
+
+@@ -918,7 +921,8 @@ ps: ps-am
+ ps-am:
+
+ uninstall-am: uninstall-libLTLIBRARIES \
+-	uninstall-libspiceincludeHEADERS uninstall-pkgconfigDATA
++	uninstall-libspice_serverincludeHEADERS \
++	uninstall-pkgconfigDATA
+
+ .MAKE: all install-am install-strip
+
+@@ -932,14 +936,15 @@ uninstall-am: uninstall-libLTLIBRARIES \
+ 	install install-am install-data install-data-am install-dvi \
+ 	install-dvi-am install-exec install-exec-am install-html \
+ 	install-html-am install-info install-info-am \
+-	install-libLTLIBRARIES install-libspiceincludeHEADERS \
++	install-libLTLIBRARIES install-libspice_serverincludeHEADERS \
+ 	install-man install-pdf install-pdf-am install-pkgconfigDATA \
+ 	install-ps install-ps-am install-strip installcheck \
+ 	installcheck-am installdirs maintainer-clean \
+ 	maintainer-clean-generic mostlyclean mostlyclean-compile \
+ 	mostlyclean-generic mostlyclean-libtool pdf pdf-am ps ps-am \
+ 	tags uninstall uninstall-am uninstall-libLTLIBRARIES \
+-	uninstall-libspiceincludeHEADERS uninstall-pkgconfigDATA
++	uninstall-libspice_serverincludeHEADERS \
++	uninstall-pkgconfigDATA
+
+
+ dist-hook:
+-- 
+1.6.6.1
+

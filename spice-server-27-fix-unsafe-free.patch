@@ -1,0 +1,136 @@
+From 7f201025fc51efb35150eb11ec656cef22c5d677 Mon Sep 17 00:00:00 2001
+From: Izik Eidus <ieidus@redhat.com>
+Date: Sat, 13 Mar 2010 10:41:34 +0200
+Subject: [PATCH 2/4] spice server: fix unsafe free() #568811
+
+Signed-off-by: Izik Eidus <ieidus@redhat.com>
+---
+ server/red_worker.c |   41 ++++++++++++++++++++++++-----------------
+ 1 files changed, 24 insertions(+), 17 deletions(-)
+
+diff --git a/server/red_worker.c b/server/red_worker.c
+index 278b20f..cdb6cc6 100644
+--- a/server/red_worker.c
++++ b/server/red_worker.c
+@@ -583,6 +583,7 @@ struct RedGlzDrawable {
+     RingItem link;    // ordered by the time it was encoded
+     QXLDrawable *qxl_drawable;
+     Drawable    *drawable;
++    uint8_t     *self_bitmap;
+     GlzDrawableInstanceItem instances_pool[MAX_GLZ_DRAWABLE_INSTANCES];
+     Ring instances;
+     uint8_t instances_count;
+@@ -803,6 +804,7 @@ struct Drawable {
+     int streamable;
+ #endif
+     BitmapGradualType copy_bitmap_graduality;
++    uint8_t *self_bitmap;
+ };
+
+ typedef struct _Drawable _Drawable;
+@@ -1493,15 +1495,13 @@ static void drawables_init(RedWorker *worker)
+     }
+ }
+
+-static inline void free_qxl_drawable(RedWorker *worker, QXLDrawable *drawable)
++static inline void free_qxl_drawable(RedWorker *worker, QXLDrawable *drawable,
++                                     uint8_t *self_bitmap)
+ {
+-    if (drawable->bitmap_offset) {
+-        PHYSICAL *addr = (PHYSICAL *)((uint8_t *)drawable + drawable->bitmap_offset);
+-        if (*addr) {
+-            red_trusted_host_virts_del(worker, (unsigned long)*addr);
+-            free((uint8_t *)*addr + worker->dev_info.phys_delta);
+-        }
+-    }
++    if (self_bitmap) {
++        red_trusted_host_virts_del(worker, (unsigned long)self_bitmap);
++        free(self_bitmap);
++     }
+     worker->qxl->release_resource(worker->qxl, &drawable->release_info);
+ }
+
+@@ -1521,7 +1521,7 @@ static inline void release_drawable(RedWorker *worker, Drawable *item)
+         if (item->red_glz_drawable) {
+             item->red_glz_drawable->drawable = NULL;
+         } else { // no refernce to the qxl drawable left
+-            free_qxl_drawable(worker, item->qxl_drawable);
++            free_qxl_drawable(worker, item->qxl_drawable, item->self_bitmap);
+         }
+         free_drawable(worker, item);
+     }
+@@ -3513,21 +3513,24 @@ static void red_get_area(RedWorker *worker, const Rect *area, uint8_t *dest, int
+     worker->draw_context.read_pixels(worker->draw_context.canvas, dest, dest_stride, area);
+ }
+
+-static inline int red_handle_self_bitmap(RedWorker *worker, QXLDrawable *drawable)
++static inline int red_handle_self_bitmap(RedWorker *worker, Drawable *drawable)
+ {
+     QXLImage *image;
+     int32_t width;
+     int32_t height;
++    uint16_t bitmap_offset;
+     uint8_t *dest;
+     int dest_stride;
+     PHYSICAL *addr;
+
+-    if (!drawable->bitmap_offset) {
++    bitmap_offset = drawable->qxl_drawable->bitmap_offset;
++
++    if (!bitmap_offset) {
+         return TRUE;
+     }
+
+-    width = drawable->bbox.right - drawable->bbox.left;
+-    height = drawable->bbox.bottom - drawable->bbox.top;
++    width = drawable->qxl_drawable->bbox.right - drawable->qxl_drawable->bbox.left;
++    height = drawable->qxl_drawable->bbox.bottom - drawable->qxl_drawable->bbox.top;
+     dest_stride = width * sizeof(uint32_t);
+
+     if (!(image = malloc(sizeof(QXLImage) + height * dest_stride))) {
+@@ -3550,11 +3553,13 @@ static inline int red_handle_self_bitmap(RedWorker *worker, QXLDrawable *drawabl
+     image->bitmap.data = (PHYSICAL)(dest - worker->dev_info.phys_delta);
+     image->bitmap.palette = 0;
+
+-    red_get_area(worker, &drawable->bitmap_area, dest, dest_stride, TRUE);
++    red_get_area(worker, &drawable->qxl_drawable->bitmap_area, dest, dest_stride, TRUE);
+
+-    addr = (PHYSICAL *)((uint8_t *)drawable + drawable->bitmap_offset);
++    addr = (PHYSICAL *)((uint8_t *)drawable->qxl_drawable + bitmap_offset);
++    validate_virt(worker, (unsigned long)addr, sizeof(unsigned long));
+     ASSERT(*addr == 0);
+     *addr = (PHYSICAL)((uint8_t *)image - worker->dev_info.phys_delta);
++    drawable->self_bitmap = (uint8_t *)image;
+     return TRUE;
+ }
+
+@@ -3638,7 +3643,7 @@ static inline void red_process_drawable(RedWorker *worker, QXLDrawable *drawable
+         return;
+     }
+
+-    if (!red_handle_self_bitmap(worker, drawable)) {
++    if (!red_handle_self_bitmap(worker, item)) {
+         release_drawable(worker, item);
+         return;
+     }
+@@ -4760,6 +4765,7 @@ static RedGlzDrawable *red_display_get_glz_drawable(DisplayChannel *channel, Dra
+     ret->display_channel = channel;
+     ret->qxl_drawable = drawable->qxl_drawable;
+     ret->drawable = drawable;
++    ret->self_bitmap = drawable->self_bitmap;
+     ret->instances_count = 0;
+     ring_init(&ret->instances);
+
+@@ -4823,7 +4829,8 @@ static void red_display_free_glz_drawable_instance(DisplayChannel *channel,
+         if (drawable) {
+             drawable->red_glz_drawable = NULL;
+         } else { // no reference to the qxl drawable left
+-            free_qxl_drawable(channel->base.worker, glz_drawable->qxl_drawable);
++            free_qxl_drawable(channel->base.worker, glz_drawable->qxl_drawable,
++                              glz_drawable->self_bitmap);
+         }
+
+         if (ring_item_is_linked(&glz_drawable->link)) {
+-- 
+1.7.2
+

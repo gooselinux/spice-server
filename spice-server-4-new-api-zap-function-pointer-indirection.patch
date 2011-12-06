@@ -1,0 +1,90 @@
+From 3e52f3b836ba6b0effbe39eef278068d5eea13db Mon Sep 17 00:00:00 2001
+From: Gerd Hoffmann <kraxel@redhat.com>
+Date: Thu, 4 Mar 2010 10:57:02 +0100
+Subject: [PATCH 03/10] new libspice api: zap function pointer indirection.
+
+Make register_*_notifier calls optional, long term they should go away
+entriely.  Add direct library calls as replacement.
+
+Signed-off-by: Gerd Hoffmann <kraxel@redhat.com>
+---
+ server/reds.c  |   37 ++++++++++++++++++++++++++++++++-----
+ server/spice.h |    4 ++++
+ 2 files changed, 36 insertions(+), 5 deletions(-)
+
+diff --git a/server/reds.c b/server/reds.c
+index 35b1a16..f6f4384 100644
+--- a/server/reds.c
++++ b/server/reds.c
+@@ -5125,8 +5125,10 @@ static void interface_change_notifier(void *opaque, VDInterface *interface,
+                 return;
+             }
+             keyboard = (KeyboardInterface *)interface;
+-            if (!keyboard->register_leds_notifier(keyboard, reds_on_keyborad_leads_change, NULL)) {
+-                red_error("register leds  notifier failed");
++            if (keyboard->register_leds_notifier) {
++                if (!keyboard->register_leds_notifier(keyboard, reds_on_keyborad_leads_change, NULL)) {
++                    red_error("register leds  notifier failed");
++                }
+             }
+         } else if (strcmp(interface->type, VD_INTERFACE_MOUSE) == 0) {
+             red_printf("VD_INTERFACE_MOUSE");
+@@ -5410,10 +5412,14 @@ static void do_spice_init(CoreInterface *core_interface)
+         red_error("key modifiers timer create failed");
+     }
+
+-    while ((interface = core->next(core, interface))) {
+-        interface_change_notifier(&reds, interface, VD_INTERFACE_ADDING);
++    if (core->next) {
++        while ((interface = core->next(core, interface))) {
++            interface_change_notifier(&reds, interface, VD_INTERFACE_ADDING);
++        }
++    }
++    if (core->register_change_notifiers) {
++        core->register_change_notifiers(core, &reds, interface_change_notifier);
+     }
+-    core->register_change_notifiers(core, &reds, interface_change_notifier);
+
+ #ifdef RED_STATISTICS
+     int shm_name_len = strlen(REDS_STAT_SHM_NAME) + 20;
+@@ -5539,3 +5545,24 @@ int spice_server_set_ticket(SpiceServer *s, const char *passwd, int lifetime,
+     }
+     return 0;
+ }
++
++int spice_server_add_interface(SpiceServer *s, VDInterface *interface)
++{
++    ASSERT(reds == s);
++    interface_change_notifier(NULL, interface, VD_INTERFACE_ADDING);
++    return 0;
++}
++
++int spice_server_remove_interface(SpiceServer *s, VDInterface *interface)
++{
++    ASSERT(reds == s);
++    interface_change_notifier(NULL, interface, VD_INTERFACE_REMOVING);
++    return 0;
++}
++
++int spice_server_kbd_leds(SpiceServer *s, KeyboardInterface *kbd, int leds)
++{
++    ASSERT(reds == s);
++    reds_on_keyborad_leads_change(NULL, leds);
++    return 0;
++}
+diff --git a/server/spice.h b/server/spice.h
+index b8a476e..c72b305 100644
+--- a/server/spice.h
++++ b/server/spice.h
+@@ -37,4 +37,8 @@ int spice_server_set_noauth(SpiceServer *s);
+ int spice_server_set_ticket(SpiceServer *s, const char *passwd, int lifetime,
+                             int fail_if_connected, int disconnect_if_connected);
+
++int spice_server_add_interface(SpiceServer *s, VDInterface *interface);
++int spice_server_remove_interface(SpiceServer *s, VDInterface *interface);
++int spice_server_kbd_leds(SpiceServer *s, KeyboardInterface *kbd, int leds);
++
+ #endif
+-- 
+1.6.6.1
+

@@ -1,0 +1,52 @@
+From 79e2461c73a79557b47f9cf29f6f602196306c38 Mon Sep 17 00:00:00 2001
+From: Gerd Hoffmann <kraxel@redhat.com>
+Date: Thu, 4 Mar 2010 10:57:06 +0100
+Subject: [PATCH 07/10] new libspice api: add spice_server_{get, set}_image_compression()
+
+Signed-off-by: Gerd Hoffmann <kraxel@redhat.com>
+---
+ server/reds.c  |   14 ++++++++++++++
+ server/spice.h |    4 ++++
+ 2 files changed, 18 insertions(+), 0 deletions(-)
+
+diff --git a/server/reds.c b/server/reds.c
+index bbc5644..84b013c 100644
+--- a/server/reds.c
++++ b/server/reds.c
+@@ -5618,6 +5618,20 @@ int spice_server_set_tls(SpiceServer *s, int port,
+     return 0;
+ }
+
++int spice_server_set_image_compression(SpiceServer *s,
++                                       spice_image_compression_t comp)
++{
++    ASSERT(reds == s);
++    set_image_compression(comp);
++    return 0;
++}
++
++spice_image_compression_t spice_server_get_image_compression(SpiceServer *s)
++{
++    ASSERT(reds == s);
++    return image_compression;
++}
++
+ int spice_server_add_interface(SpiceServer *s, VDInterface *interface)
+ {
+     ASSERT(reds == s);
+diff --git a/server/spice.h b/server/spice.h
+index 39fadc9..cda462f 100644
+--- a/server/spice.h
++++ b/server/spice.h
+@@ -59,4 +59,8 @@ typedef enum {
+     SPICE_IMAGE_COMPRESS_LZ       = 6,
+ } spice_image_compression_t;
+
++int spice_server_set_image_compression(SpiceServer *s,
++                                       spice_image_compression_t comp);
++spice_image_compression_t spice_server_get_image_compression(SpiceServer *s);
++
+ #endif
+-- 
+1.6.6.1
+

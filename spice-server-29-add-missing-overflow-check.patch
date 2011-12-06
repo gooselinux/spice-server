@@ -1,0 +1,31 @@
+From 5eefbfc82835630a34783445638b310027bc683f Mon Sep 17 00:00:00 2001
+From: Gerd Hoffmann <kraxel@redhat.com>
+Date: Thu, 3 Jun 2010 17:56:13 +0200
+Subject: [PATCH 4/4] add missing overflow check #568811
+
+---
+ server/red_worker.c |    7 +++++--
+ 1 files changed, 5 insertions(+), 2 deletions(-)
+
+diff --git a/server/red_worker.c b/server/red_worker.c
+index fcc400b..ca9634d 100644
+--- a/server/red_worker.c
++++ b/server/red_worker.c
+@@ -5475,9 +5475,12 @@ static BitmapGradualType _get_bitmap_graduality_level(RedWorker *worker, Bitmap
+
+ static inline int _stride_is_extra(Bitmap *bitmap)
+ {
++    int format;
++
+     ASSERT(bitmap);
+-    if (BITMAP_FMT_IS_RGB[MIN(bitmap->format, sizeof(BITMAP_FMT_IS_RGB) / sizeof(int))]) {
+-        return ((bitmap->x * BITMAP_FMP_BYTES_PER_PIXEL[bitmap->format]) < bitmap->stride);
++    format = MIN(bitmap->format, sizeof(BITMAP_FMT_IS_RGB) / sizeof(int));
++    if (BITMAP_FMT_IS_RGB[format]) {
++        return ((bitmap->x * BITMAP_FMP_BYTES_PER_PIXEL[format]) < bitmap->stride);
+     } else {
+         switch (bitmap->format) {
+         case BITMAP_FMT_8BIT:
+-- 
+1.7.2
+

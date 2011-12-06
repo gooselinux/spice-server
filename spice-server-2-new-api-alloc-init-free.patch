@@ -1,0 +1,100 @@
+From 5ea2893e3cf6f99c7f2a8b62736871068def2b49 Mon Sep 17 00:00:00 2001
+From: Gerd Hoffmann <kraxel@redhat.com>
+Date: Thu, 4 Mar 2010 10:57:00 +0100
+Subject: [PATCH 01/10] new libspice api: alloc, initi and free spice server instances.
+
+The implementation can't handle multiple spice server instances at the
+same time right now.  The API allows this though, so if we fixup the
+implementation some day we don't have to change the API.
+
+Signed-off-by: Gerd Hoffmann <kraxel@redhat.com>
+---
+ server/reds.c  |   38 +++++++++++++++++++++++++++++++++-----
+ server/spice.h |    8 +++++++-
+ 2 files changed, 40 insertions(+), 6 deletions(-)
+
+diff --git a/server/reds.c b/server/reds.c
+index f5de3ee..f6447cd 100644
+--- a/server/reds.c
++++ b/server/reds.c
+@@ -5375,7 +5375,7 @@ static const char *version_string = VERSION;
+ static const char *patch_string = PATCHID;
+ static const char *distro_string = DISTRIBUTION;
+
+-void __attribute__ ((visibility ("default"))) spice_init(CoreInterface *core_interface)
++static void do_spice_init(CoreInterface *core_interface)
+ {
+     VDInterface *interface = NULL;
+
+@@ -5394,10 +5394,6 @@ void __attribute__ ((visibility ("default"))) spice_init(CoreInterface *core_int
+     if (core_interface->base.minor_version > 1) {
+         log_proc = core->log;
+     }
+-    if (!(reds = malloc(sizeof(RedsState)))) {
+-        red_error("reds alloc failed");
+-    }
+-    memset(reds, 0, sizeof(RedsState));
+     reds->listen_socket = -1;
+     reds->secure_listen_socket = -1;
+     reds->peer = NULL;
+@@ -5465,3 +5461,35 @@ void __attribute__ ((visibility ("default"))) spice_init(CoreInterface *core_int
+     atexit(reds_exit);
+ }
+
++void __attribute__ ((visibility ("default"))) spice_init(CoreInterface *core_interface)
++{
++    spice_server_new();
++    do_spice_init(core_interface);
++}
++
++/* new interface */
++SpiceServer *spice_server_new(void)
++{
++    /* we can't handle multiple instances (yet) */
++    ASSERT(reds == NULL);
++
++    if (!(reds = malloc(sizeof(RedsState)))) {
++        red_error("reds alloc failed");
++    }
++    memset(reds, 0, sizeof(RedsState));
++    return reds;
++}
++
++int spice_server_init(SpiceServer *s, CoreInterface *core)
++{
++    ASSERT(reds == s);
++    do_spice_init(core);
++    red_dispatcher_add_renderer("cairo");
++    return 0;
++}
++
++void spice_server_destroy(SpiceServer *s)
++{
++    ASSERT(reds == s);
++    reds_exit();
++}
+diff --git a/server/spice.h b/server/spice.h
+index 26de4f7..49a52a8 100644
+--- a/server/spice.h
++++ b/server/spice.h
+@@ -20,10 +20,16 @@
+
+ #include "vd_interface.h"
+
++/* old interface */
+ extern const char *spice_usage_str[];
+
+ int spice_parse_args(const char *args);
+ void spice_init(CoreInterface *core);
+
+-#endif
++/* new interface */
++typedef struct RedsState SpiceServer;
++SpiceServer *spice_server_new(void);
++int spice_server_init(SpiceServer *s, CoreInterface *core);
++void spice_server_destroy(SpiceServer *s);
+
++#endif
+-- 
+1.6.6.1
+

@@ -1,0 +1,51 @@
+From da00641f2f160d2d1a63d9c7c74f10f29bedee68 Mon Sep 17 00:00:00 2001
+From: Gerd Hoffmann <kraxel@redhat.com>
+Date: Thu, 4 Mar 2010 10:57:08 +0100
+Subject: [PATCH 09/10] new libspice api: add spice_server_set_channel_security()
+
+Signed-off-by: Gerd Hoffmann <kraxel@redhat.com>
+---
+ server/reds.c  |   13 +++++++++++++
+ server/spice.h |    4 ++++
+ 2 files changed, 17 insertions(+), 0 deletions(-)
+
+diff --git a/server/reds.c b/server/reds.c
+index d85cec9..b78f988 100644
+--- a/server/reds.c
++++ b/server/reds.c
+@@ -5619,6 +5619,19 @@ spice_image_compression_t spice_server_get_image_compression(SpiceServer *s)
+     return image_compression;
+ }
+
++int spice_server_set_channel_security(SpiceServer *s,
++                                      spice_channel_t channel,
++                                      int security)
++{
++    ASSERT(reds == s);
++    if (channel == SPICE_CHANNEL_ALL) {
++        set_all_channels_security(security);
++    } else {
++        set_one_channel_security(channel, security);
++    }
++    return 0;
++}
++
+ int spice_server_add_interface(SpiceServer *s, VDInterface *interface)
+ {
+     ASSERT(reds == s);
+diff --git a/server/spice.h b/server/spice.h
+index 1f9d8ef..c3fd97a 100644
+--- a/server/spice.h
++++ b/server/spice.h
+@@ -79,4 +79,8 @@ typedef enum {
+ #define SPICE_CHANNEL_SECURITY_NON (1 << 0)
+ #define SPICE_CHANNEL_SECURITY_SSL (1 << 1)
+
++int spice_server_set_channel_security(SpiceServer *s,
++                                      spice_channel_t channel,
++                                      int security);
++
+ #endif
+-- 
+1.6.6.1
+

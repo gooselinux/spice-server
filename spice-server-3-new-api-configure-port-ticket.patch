@@ -1,0 +1,89 @@
+From 5baae1c7a08c5eb1f0076df05f41843b4532ee49 Mon Sep 17 00:00:00 2001
+From: Gerd Hoffmann <kraxel@redhat.com>
+Date: Thu, 4 Mar 2010 10:57:01 +0100
+Subject: [PATCH 02/10] new libspice api: configure port + ticket
+
+Add new functions to configure spice port and ticketing.  Yes, this is
+incomplete, it includes just the most important bits to get something
+up'n'running.
+
+These functions are supposed to replace both spice_parse_args() and
+the monitor interaction via qterm interface.
+
+Signed-off-by: Gerd Hoffmann <kraxel@redhat.com>
+---
+ server/reds.c  |   46 ++++++++++++++++++++++++++++++++++++++++++++++
+ server/spice.h |    5 +++++
+ 2 files changed, 51 insertions(+), 0 deletions(-)
+
+diff --git a/server/reds.c b/server/reds.c
+index f6447cd..35b1a16 100644
+--- a/server/reds.c
++++ b/server/reds.c
+@@ -5493,3 +5493,49 @@ void spice_server_destroy(SpiceServer *s)
+     ASSERT(reds == s);
+     reds_exit();
+ }
++
++int spice_server_set_port(SpiceServer *s, int port)
++{
++    ASSERT(reds == s);
++    if (port < 0 || port > 0xffff)
++        return -1;
++    spice_port = port;
++    return 0;
++}
++
++int spice_server_set_noauth(SpiceServer *s)
++{
++    ASSERT(reds == s);
++    memset(taTicket.password, 0, sizeof(taTicket.password));
++    ticketing_enabled = 0;
++    return 0;
++}
++
++int spice_server_set_ticket(SpiceServer *s, const char *passwd, int lifetime,
++                            int fail_if_connected, int disconnect_if_connected)
++{
++    ASSERT(reds == s);
++
++    if (reds->peer) {
++        if (fail_if_connected)
++            return -1;
++        if (disconnect_if_connected)
++            reds_disconnect();
++    }
++
++    on_activating_ticketing();
++    ticketing_enabled = 1;
++    if (lifetime == 0) {
++        taTicket.expiration_time = INT_MAX;
++    } else {
++        time_t now = time(NULL);
++        taTicket.expiration_time = now + lifetime;
++    }
++    if (passwd != NULL) {
++        strncpy(taTicket.password, passwd, sizeof(taTicket.password));
++    } else {
++        memset(taTicket.password, 0, sizeof(taTicket.password));
++        taTicket.expiration_time = 0;
++    }
++    return 0;
++}
+diff --git a/server/spice.h b/server/spice.h
+index 49a52a8..b8a476e 100644
+--- a/server/spice.h
++++ b/server/spice.h
+@@ -32,4 +32,9 @@ SpiceServer *spice_server_new(void);
+ int spice_server_init(SpiceServer *s, CoreInterface *core);
+ void spice_server_destroy(SpiceServer *s);
+
++int spice_server_set_port(SpiceServer *s, int port);
++int spice_server_set_noauth(SpiceServer *s);
++int spice_server_set_ticket(SpiceServer *s, const char *passwd, int lifetime,
++                            int fail_if_connected, int disconnect_if_connected);
++
+ #endif
+-- 
+1.6.6.1
+

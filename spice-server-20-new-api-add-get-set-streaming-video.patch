@@ -1,0 +1,61 @@
+From 48d045a0094b9ec2a7786268ca917342b0ea8f18 Mon Sep 17 00:00:00 2001
+From: Gerd Hoffmann <kraxel@redhat.com>
+Date: Wed, 24 Mar 2010 14:53:05 +0100
+Subject: [PATCH 2/4] new libspice api: add spice_server_{get, set}_streaming_video() #571286
+
+Add functions to configure streaming video.
+
+[ v2: add sanity check for passed enum value ]
+
+Signed-off-by: Gerd Hoffmann <kraxel@redhat.com>
+---
+ server/reds.c  |   18 ++++++++++++++++++
+ server/spice.h |    3 +++
+ 2 files changed, 21 insertions(+), 0 deletions(-)
+
+diff --git a/server/reds.c b/server/reds.c
+index eeaeb7f..cb7742f 100644
+--- a/server/reds.c
++++ b/server/reds.c
+@@ -5625,6 +5625,24 @@ spice_image_compression_t spice_server_get_image_compression(SpiceServer *s)
+     return image_compression;
+ }
+
++int spice_server_set_streaming_video(SpiceServer *s, int value)
++{
++    ASSERT(reds == s);
++    if (value != SPICE_STREAM_VIDEO_OFF &&
++        value != SPICE_STREAM_VIDEO_ALL &&
++        value != SPICE_STREAM_VIDEO_FILTER)
++        return -1;
++    streaming_video = value;
++    red_dispatcher_on_sv_change();
++    return 0;
++}
++
++int spice_server_get_streaming_video(SpiceServer *s)
++{
++    ASSERT(reds == s);
++    return streaming_video;
++}
++
+ int spice_server_set_channel_security(SpiceServer *s,
+                                       spice_channel_t channel,
+                                       int security)
+diff --git a/server/spice.h b/server/spice.h
+index 5dbe710..fd94590 100644
+--- a/server/spice.h
++++ b/server/spice.h
+@@ -98,6 +98,9 @@ enum {
+     SPICE_STREAM_VIDEO_FILTER
+ };
+
++int spice_server_set_streaming_video(SpiceServer *s, int value);
++int spice_server_get_streaming_video(SpiceServer *s);
++
+ /*
+  * setting information about the migration destination.
+  * For null port use -1.
+-- 
+1.6.6.1
+

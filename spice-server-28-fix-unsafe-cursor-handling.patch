@@ -1,0 +1,177 @@
+From 48504229fb32745756ee2486f13534cd3c112913 Mon Sep 17 00:00:00 2001
+From: Izik Eidus <ieidus@redhat.com>
+Date: Sat, 13 Mar 2010 10:42:09 +0200
+Subject: [PATCH 3/4] spice server: fix unsafe cursor handling #568811
+
+Signed-off-by: Izik Eidus <ieidus@redhat.com>
+---
+ server/red_worker.c |   73 ++++++++++++++++++++++++++++++++++++++++++++++-----
+ 1 files changed, 66 insertions(+), 7 deletions(-)
+
+diff --git a/server/red_worker.c b/server/red_worker.c
+index cdb6cc6..fcc400b 100644
+--- a/server/red_worker.c
++++ b/server/red_worker.c
+@@ -290,6 +290,7 @@ typedef struct CursorItem {
+     PipeItem pipe_data;
+     int refs;
+     int type;
++    QXLCursorCmd *qxl_cursor;
+ } CursorItem;
+
+ typedef struct LocalCursor {
+@@ -807,6 +808,15 @@ struct Drawable {
+     uint8_t *self_bitmap;
+ };
+
++typedef struct _CursorItem _CursorItem;
++struct _CursorItem {
++    union {
++        CursorItem cursor_item;
++        _CursorItem *next;
++    } u;
++};
++
++
+ typedef struct _Drawable _Drawable;
+ struct _Drawable {
+     union {
+@@ -890,6 +900,7 @@ typedef struct TrustedHostVirtItem {
+ } TrustedHostVirtItem;
+
+ #define NUM_DRAWABLES 1000
++#define NUM_CURSORS 100
+
+ typedef struct RedWorker {
+     EventListener dev_listener;
+@@ -930,6 +941,9 @@ typedef struct RedWorker {
+     _Drawable drawables[NUM_DRAWABLES];
+     _Drawable *free_drawables;
+
++    _CursorItem cursor_items[NUM_CURSORS];
++    _CursorItem *free_cursor_items;
++
+     uint32_t local_images_pos;
+     LocalImage local_images[MAX_BITMAPS];
+
+@@ -4365,6 +4379,8 @@ static void red_update_area(RedWorker *worker, const Rect *area)
+
+ #endif
+
++static inline void free_cursor_item(RedWorker *worker, CursorItem *item);
++
+ static void red_release_cursor(RedWorker *worker, CursorItem *cursor)
+ {
+     if (!--cursor->refs) {
+@@ -4374,8 +4390,9 @@ static void red_release_cursor(RedWorker *worker, CursorItem *cursor)
+             free(cursor);
+             return;
+         }
+-        cursor_cmd = CONTAINEROF(cursor, QXLCursorCmd, device_data);
++        cursor_cmd = cursor->qxl_cursor;
+         worker->qxl->release_resource(worker->qxl, &cursor_cmd->release_info);
++        free_cursor_item(worker, cursor);
+     }
+ }
+
+@@ -4388,9 +4405,52 @@ static void red_set_cursor(RedWorker *worker, CursorItem *cursor)
+     worker->cursor = cursor;
+ }
+
++static inline CursorItem *alloc_cursor_item(RedWorker *worker)
++{
++    CursorItem *cursor;
++    if (!worker->free_cursor_items) {
++        return NULL;
++    }
++    cursor = &worker->free_cursor_items->u.cursor_item;
++    worker->free_cursor_items = worker->free_cursor_items->u.next;
++    return cursor;
++}
++
++static inline void free_cursor_item(RedWorker *worker, CursorItem *item)
++{
++    ((_CursorItem *)item)->u.next = worker->free_cursor_items;
++    worker->free_cursor_items = (_CursorItem *)item;
++}
++
++static void cursor_items_init(RedWorker *worker)
++{
++    int i;
++
++    worker->free_cursor_items = NULL;
++    for (i = 0; i < NUM_CURSORS; i++) {
++        free_cursor_item(worker, &worker->cursor_items[i].u.cursor_item);
++    }
++}
++
++static CursorItem *get_cursor_item(RedWorker *worker, QXLCursorCmd *cmd)
++{
++    CursorItem *cursor_item;
++
++    if(!(cursor_item = alloc_cursor_item(worker))) {
++        PANIC("alloc_cursor item faild");
++    }
++
++    cursor_item->refs = 1;
++    red_pipe_item_init(&cursor_item->pipe_data, PIPE_ITEM_TYPE_CURSOR);
++    cursor_item->type = CURSOR_TYPE_INVALID;
++    cursor_item->qxl_cursor = cmd;
++
++    return cursor_item;
++}
++
+ void qxl_process_cursor(RedWorker *worker, QXLCursorCmd *cursor_cmd)
+ {
+-    CursorItem *item = (CursorItem *)cursor_cmd->device_data;
++    CursorItem *item = get_cursor_item(worker, cursor_cmd);
+     int cursor_show = FALSE;
+
+     red_pipe_item_init(&item->pipe_data, PIPE_ITEM_TYPE_CURSOR);
+@@ -6027,7 +6087,7 @@ static void fill_cursor(CursorChannel *cursor_channel, RedCursor *red_cursor, Cu
+         QXLCursorCmd *cursor_cmd;
+         QXLCursor *qxl_cursor;
+
+-        cursor_cmd = CONTAINEROF(cursor, QXLCursorCmd, device_data);
++        cursor_cmd = cursor->qxl_cursor;
+         qxl_cursor = (QXLCursor *)get_virt(channel->worker, cursor_cmd->u.set.shape,
+                                            sizeof(QXLCursor));
+         red_cursor->flags = 0;
+@@ -7009,7 +7069,7 @@ static void red_send_cursor(CursorChannel *cursor_channel, CursorItem *cursor)
+
+     channel = &cursor_channel->base;
+
+-    cmd = CONTAINEROF(cursor, QXLCursorCmd, device_data);
++    cmd = cursor->qxl_cursor;
+     switch (cmd->type) {
+     case QXL_CURSOR_MOVE:
+         channel->send_data.header.type = RED_CURSOR_MOVE;
+@@ -8326,7 +8386,7 @@ static void red_cursor_flush(RedWorker *worker)
+
+     ASSERT(worker->cursor->type == CURSOR_TYPE_DEV);
+
+-    cursor_cmd = CONTAINEROF(worker->cursor, QXLCursorCmd, device_data);
++    cursor_cmd = worker->cursor->qxl_cursor;
+     ASSERT(cursor_cmd->type == QXL_CURSOR_SET);
+     qxl_cursor = (QXLCursor *)get_virt(worker, cursor_cmd->u.set.shape, sizeof(QXLCursor));
+
+@@ -8687,8 +8747,6 @@ static void red_init(RedWorker *worker, WorkerInitData *init_data)
+     RedWorkeMessage message;
+     int epoll;
+
+-    ASSERT(sizeof(CursorItem) <= QXL_CURSUR_DEVICE_DATA_SIZE);
+-
+     memset(worker, 0, sizeof(RedWorker));
+     worker->qxl = init_data->qxl_interface;
+     worker->id = init_data->id;
+@@ -8709,6 +8767,7 @@ static void red_init(RedWorker *worker, WorkerInitData *init_data)
+     ring_init(&worker->trusted_host_virts);
+     image_cache_init(&worker->image_cache);
+     drawables_init(worker);
++    cursor_items_init(worker);
+     red_init_streams(worker);
+     stat_init(&worker->add_stat, add_stat_name);
+     stat_init(&worker->exclude_stat, exclude_stat_name);
+-- 
+1.7.2
+

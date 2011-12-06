@@ -1,0 +1,203 @@
+From 966ea352380df6915aae5e38978572ea6feef77e Mon Sep 17 00:00:00 2001
+From: Gerd Hoffmann <kraxel@redhat.com>
+Date: Wed, 24 Mar 2010 13:48:03 +0100
+Subject: [PATCH 1/4] new libspice api: move STREAM_VIDEO_* enum to spice.h #571286
+
+move STREAM_VIDEO_* enum to spice.h, thereby making it part of the
+public api.  Also prefix with SPICE_ for namespace reasons.
+
+Signed-off-by: Gerd Hoffmann <kraxel@redhat.com>
+---
+ server/red_common.h     |    7 -------
+ server/red_dispatcher.c |    4 ++--
+ server/red_worker.c     |   16 ++++++++--------
+ server/reds.c           |   24 ++++++++++++------------
+ server/spice.h          |    7 +++++++
+ 5 files changed, 29 insertions(+), 29 deletions(-)
+
+diff --git a/server/red_common.h b/server/red_common.h
+index 4f46d8b..e1b158c 100644
+--- a/server/red_common.h
++++ b/server/red_common.h
+@@ -79,13 +79,6 @@
+ #define CONTAINEROF(ptr, type, member) \
+     ((type *)((uint8_t *)(ptr) - OFFSETOF(type, member)))
+
+-enum {
+-    STREAM_VIDEO_INVALID,
+-    STREAM_VIDEO_OFF,
+-    STREAM_VIDEO_ALL,
+-    STREAM_VIDEO_FILTER
+-};
+-
+ static inline uint64_t get_time_stamp()
+ {
+     struct timespec time_space;
+diff --git a/server/red_dispatcher.c b/server/red_dispatcher.c
+index 628f42d..19da665 100644
+--- a/server/red_dispatcher.c
++++ b/server/red_dispatcher.c
+@@ -317,8 +317,8 @@ void red_dispatcher_set_mm_time(uint32_t mm_time)
+
+ static inline int calc_compression_level()
+ {
+-    ASSERT(streaming_video != STREAM_VIDEO_INVALID);
+-    if ((streaming_video != STREAM_VIDEO_OFF) ||
++    ASSERT(streaming_video != SPICE_STREAM_VIDEO_INVALID);
++    if ((streaming_video != SPICE_STREAM_VIDEO_OFF) ||
+         (image_compression != SPICE_IMAGE_COMPRESS_QUIC)) {
+         return 0;
+     } else {
+diff --git a/server/red_worker.c b/server/red_worker.c
+index 1495152..93e228d 100644
+--- a/server/red_worker.c
++++ b/server/red_worker.c
+@@ -2740,7 +2740,7 @@ static inline void red_update_copy_graduality(RedWorker* worker, Drawable *drawa
+     QXLImage *qxl_image;
+     ASSERT(drawable->qxl_drawable->type == QXL_DRAW_COPY);
+
+-    if (worker->streaming_video != STREAM_VIDEO_FILTER) {
++    if (worker->streaming_video != SPICE_STREAM_VIDEO_FILTER) {
+         drawable->copy_bitmap_graduality = BITMAP_GRADUAL_INVALID;
+         return;
+     }
+@@ -2810,7 +2810,7 @@ static inline void red_stream_maintenance(RedWorker *worker, Drawable *candidate
+ #else
+     if (!worker->streaming_video ||
+                         !red_is_next_stream_frame(candidate, prev, worker->dev_info.phys_delta)) {
+-    if ((worker->streaming_video == STREAM_VIDEO_OFF) ||
++    if ((worker->streaming_video == SPICE_STREAM_VIDEO_OFF) ||
+                          !red_is_next_stream_frame(candidate, prev, worker->dev_info.phys_delta) {
+         return;
+     }
+@@ -3299,7 +3299,7 @@ static inline void red_update_streamable(RedWorker *worker, Drawable *drawable,
+ {
+     QXLImage *qxl_image;
+
+-    if (worker->streaming_video == STREAM_VIDEO_OFF) {
++    if (worker->streaming_video == SPICE_STREAM_VIDEO_OFF) {
+         return;
+     }
+
+@@ -3314,7 +3314,7 @@ static inline void red_update_streamable(RedWorker *worker, Drawable *drawable,
+         return;
+     }
+
+-    if (worker->streaming_video == STREAM_VIDEO_FILTER) {
++    if (worker->streaming_video == SPICE_STREAM_VIDEO_FILTER) {
+         Rect* rect;
+         int size;
+
+@@ -8356,15 +8356,15 @@ static void handle_dev_input(EventListener *listener, uint32_t events)
+         break;
+     case RED_WORKER_MESSAGE_SET_STREAMING_VIDEO:
+         receive_data(worker->channel, &worker->streaming_video, sizeof(uint32_t));
+-        ASSERT(worker->streaming_video != STREAM_VIDEO_INVALID);
++        ASSERT(worker->streaming_video != SPICE_STREAM_VIDEO_INVALID);
+         switch(worker->streaming_video) {
+-            case STREAM_VIDEO_ALL:
++            case SPICE_STREAM_VIDEO_ALL:
+                 red_printf("sv all");
+                 break;
+-            case STREAM_VIDEO_FILTER:
++            case SPICE_STREAM_VIDEO_FILTER:
+                 red_printf("sv filter");
+                 break;
+-            case STREAM_VIDEO_OFF:
++            case SPICE_STREAM_VIDEO_OFF:
+                 red_printf("sv off");
+                 break;
+             default:
+diff --git a/server/reds.c b/server/reds.c
+index 45d899d..eeaeb7f 100644
+--- a/server/reds.c
++++ b/server/reds.c
+@@ -83,7 +83,7 @@ static char *default_renderer = "cairo";
+ static int ticketing_enabled = 1; //Ticketing is enabled by default
+ static pthread_mutex_t *lock_cs;
+ static long *lock_count;
+-uint32_t streaming_video = STREAM_VIDEO_FILTER;
++uint32_t streaming_video = SPICE_STREAM_VIDEO_FILTER;
+ spice_image_compression_t image_compression = SPICE_IMAGE_COMPRESS_AUTO_GLZ;
+ int agent_mouse = TRUE;
+
+@@ -3631,16 +3631,16 @@ static void reds_do_info_spice()
+     }
+
+     switch (streaming_video) {
+-        case STREAM_VIDEO_ALL:
++        case SPICE_STREAM_VIDEO_ALL:
+             core->term_printf(core, " sv=all");
+             break;
+-        case STREAM_VIDEO_FILTER:
++        case SPICE_STREAM_VIDEO_FILTER:
+             core->term_printf(core, " sv=filter");
+             break;
+-        case STREAM_VIDEO_OFF:
++        case SPICE_STREAM_VIDEO_OFF:
+             core->term_printf(core, " sv=off");
+             break;
+-        case STREAM_VIDEO_INVALID:
++        case SPICE_STREAM_VIDEO_INVALID:
+         default:
+             core->term_printf(core, " sv=invalid");
+
+@@ -3699,22 +3699,22 @@ static void reds_do_set_image_compression_2(const VDICmdArg *args)
+ static int reds_get_streaming_video(const char *val)
+ {
+     if (strcmp(val, "on") == 0) {
+-        return STREAM_VIDEO_FILTER;
++        return SPICE_STREAM_VIDEO_FILTER;
+     } else if (strcmp(val, "filter") == 0) {
+-        return STREAM_VIDEO_FILTER;
++        return SPICE_STREAM_VIDEO_FILTER;
+     } else if (strcmp(val, "all") == 0) {
+-        return STREAM_VIDEO_ALL;
++        return SPICE_STREAM_VIDEO_ALL;
+     } else if (strcmp(val, "off") == 0){
+-        return STREAM_VIDEO_OFF;
++        return SPICE_STREAM_VIDEO_OFF;
+     } else {
+-        return STREAM_VIDEO_INVALID;
++        return SPICE_STREAM_VIDEO_INVALID;
+     }
+ }
+
+ static void reds_do_set_streaming_video(const char *val)
+ {
+     uint32_t new_val = reds_get_streaming_video(val);
+-    if (new_val == STREAM_VIDEO_INVALID) {
++    if (new_val == SPICE_STREAM_VIDEO_INVALID) {
+         core->term_printf(core, "bad streaming video arg\n");
+         return;
+     }
+@@ -4072,7 +4072,7 @@ int __attribute__ ((visibility ("default"))) spice_parse_args(const char *in_arg
+                 goto error;
+             }
+             streaming_video = reds_get_streaming_video(val);
+-            if (streaming_video == STREAM_VIDEO_INVALID) {
++            if (streaming_video == SPICE_STREAM_VIDEO_INVALID) {
+                 goto error;
+             }
+             break;
+diff --git a/server/spice.h b/server/spice.h
+index 05c6361..5dbe710 100644
+--- a/server/spice.h
++++ b/server/spice.h
+@@ -91,6 +91,13 @@ int spice_server_add_renderer(SpiceServer *s, const char *name);
+ int spice_server_get_sock_info(SpiceServer *s, struct sockaddr *sa, socklen_t *salen);
+ int spice_server_get_peer_info(SpiceServer *s, struct sockaddr *sa, socklen_t *salen);
+
++enum {
++    SPICE_STREAM_VIDEO_INVALID,
++    SPICE_STREAM_VIDEO_OFF,
++    SPICE_STREAM_VIDEO_ALL,
++    SPICE_STREAM_VIDEO_FILTER
++};
++
+ /*
+  * setting information about the migration destination.
+  * For null port use -1.
+-- 
+1.6.6.1
+

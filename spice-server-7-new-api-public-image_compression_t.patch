@@ -1,0 +1,331 @@
+From 91305188c2adaf53964829543346962499943409 Mon Sep 17 00:00:00 2001
+From: Gerd Hoffmann <kraxel@redhat.com>
+Date: Thu, 4 Mar 2010 10:57:05 +0100
+Subject: [PATCH 06/10] new libspice api: make image_compression_t part of the public api.
+
+Signed-off-by: Gerd Hoffmann <kraxel@redhat.com>
+---
+ server/red_common.h     |   11 +----------
+ server/red_dispatcher.c |    7 ++++---
+ server/red_worker.c     |   47 +++++++++++++++++++++++++----------------------
+ server/red_worker.h     |    2 +-
+ server/reds.c           |   40 ++++++++++++++++++++--------------------
+ server/spice.h          |   10 ++++++++++
+ 6 files changed, 61 insertions(+), 56 deletions(-)
+
+diff --git a/server/red_common.h b/server/red_common.h
+index 49ba3ad..4f46d8b 100644
+--- a/server/red_common.h
++++ b/server/red_common.h
+@@ -21,6 +21,7 @@
+ #include <sys/uio.h>
+ #include <openssl/ssl.h>
+
++#include "spice.h"
+ #include "red.h"
+
+ #ifndef MIN
+@@ -78,16 +79,6 @@
+ #define CONTAINEROF(ptr, type, member) \
+     ((type *)((uint8_t *)(ptr) - OFFSETOF(type, member)))
+
+-typedef enum {
+-    IMAGE_COMPRESS_INVALID,
+-    IMAGE_COMPRESS_AUTO_GLZ,
+-    IMAGE_COMPRESS_AUTO_LZ,
+-    IMAGE_COMPRESS_QUIC,
+-    IMAGE_COMPRESS_GLZ,
+-    IMAGE_COMPRESS_LZ,
+-    IMAGE_COMPRESS_OFF,
+-} image_compression_t;
+-
+ enum {
+     STREAM_VIDEO_INVALID,
+     STREAM_VIDEO_OFF,
+diff --git a/server/red_dispatcher.c b/server/red_dispatcher.c
+index b6c54f3..628f42d 100644
+--- a/server/red_dispatcher.c
++++ b/server/red_dispatcher.c
+@@ -62,7 +62,7 @@ typedef struct RedWorkeState {
+ } RedWorkeState;
+
+ extern uint32_t streaming_video;
+-extern image_compression_t image_compression;
++extern spice_image_compression_t image_compression;
+
+ static RedDispatcher *dispatchers = NULL;
+
+@@ -318,7 +318,8 @@ void red_dispatcher_set_mm_time(uint32_t mm_time)
+ static inline int calc_compression_level()
+ {
+     ASSERT(streaming_video != STREAM_VIDEO_INVALID);
+-    if ((streaming_video != STREAM_VIDEO_OFF) || (image_compression != IMAGE_COMPRESS_QUIC)) {
++    if ((streaming_video != STREAM_VIDEO_OFF) ||
++        (image_compression != SPICE_IMAGE_COMPRESS_QUIC)) {
+         return 0;
+     } else {
+         return 1;
+@@ -333,7 +334,7 @@ void red_dispatcher_on_ic_change()
+         RedWorkeMessage message = RED_WORKER_MESSAGE_SET_COMPRESSION;
+         now->qxl_interface->set_compression_level(now->qxl_interface, compression_level);
+         write_message(now->channel, &message);
+-        send_data(now->channel, &image_compression, sizeof(image_compression_t));
++        send_data(now->channel, &image_compression, sizeof(spice_image_compression_t));
+         now = now->next;
+     }
+ }
+diff --git a/server/red_worker.c b/server/red_worker.c
+index 8e5ca39..773072a 100644
+--- a/server/red_worker.c
++++ b/server/red_worker.c
+@@ -912,7 +912,7 @@ typedef struct RedWorker {
+
+     ImageCache image_cache;
+
+-    image_compression_t image_compression;
++    spice_image_compression_t image_compression;
+
+     uint32_t mouse_mode;
+
+@@ -5501,13 +5501,14 @@ static inline int red_compress_image(DisplayChannel *display_channel,
+                                      RedImage *dest, Bitmap *src, Drawable *drawable,
+                                      compress_send_data_t* o_comp_data)
+ {
+-    image_compression_t image_compression = display_channel->base.worker->image_compression;
++    spice_image_compression_t image_compression =
++        display_channel->base.worker->image_compression;
+     int quic_compress = FALSE;
+
+-    if ((image_compression == IMAGE_COMPRESS_OFF) ||
++    if ((image_compression == SPICE_IMAGE_COMPRESS_OFF) ||
+         ((src->y * src->stride) < MIN_SIZE_TO_COMPRESS)) { // TODO: change the size cond
+         return FALSE;
+-    } else if (image_compression == IMAGE_COMPRESS_QUIC) {
++    } else if (image_compression == SPICE_IMAGE_COMPRESS_QUIC) {
+         if (BITMAP_FMT_IS_PLT[src->format]) {
+             return FALSE;
+         } else {
+@@ -5519,16 +5520,16 @@ static inline int red_compress_image(DisplayChannel *display_channel,
+             of the image in bytes (2) unstable bitmaps
+         */
+         if (_stride_is_extra(src) || (src->flags & QXL_BITMAP_UNSTABLE)) {
+-            if ((image_compression == IMAGE_COMPRESS_LZ) ||
+-                (image_compression == IMAGE_COMPRESS_GLZ) ||
++            if ((image_compression == SPICE_IMAGE_COMPRESS_LZ) ||
++                (image_compression == SPICE_IMAGE_COMPRESS_GLZ) ||
+                 BITMAP_FMT_IS_PLT[src->format]) {
+                 return FALSE;
+             } else {
+                 quic_compress = TRUE;
+             }
+         } else {
+-            if ((image_compression == IMAGE_COMPRESS_AUTO_LZ) ||
+-                (image_compression == IMAGE_COMPRESS_AUTO_GLZ)) {
++            if ((image_compression == SPICE_IMAGE_COMPRESS_AUTO_LZ) ||
++                (image_compression == SPICE_IMAGE_COMPRESS_AUTO_GLZ)) {
+                 if ((src->x < MIN_DIMENSION_TO_QUIC) || (src->y < MIN_DIMENSION_TO_QUIC)) {
+                     quic_compress = FALSE;
+                 } else {
+@@ -5553,13 +5554,13 @@ static inline int red_compress_image(DisplayChannel *display_channel,
+     } else {
+         int glz;
+         int ret;
+-        if ((image_compression == IMAGE_COMPRESS_AUTO_GLZ) ||
+-            (image_compression == IMAGE_COMPRESS_GLZ)) {
++        if ((image_compression == SPICE_IMAGE_COMPRESS_AUTO_GLZ) ||
++            (image_compression == SPICE_IMAGE_COMPRESS_GLZ)) {
+             glz = BITMAP_FMT_IS_RGB[src->format] && (
+                     (src->x * src->y) < glz_enc_dictionary_get_size(
+                         display_channel->glz_dict->dict));
+-        } else if ((image_compression == IMAGE_COMPRESS_AUTO_LZ) ||
+-                   (image_compression == IMAGE_COMPRESS_LZ)) {
++        } else if ((image_compression == SPICE_IMAGE_COMPRESS_AUTO_LZ) ||
++                   (image_compression == SPICE_IMAGE_COMPRESS_LZ)) {
+             glz = FALSE;
+         } else {
+             red_error("invalid image compression type %u", image_compression);
+@@ -5696,9 +5697,10 @@ static void fill_brush(DisplayChannel *display_channel, Brush *brush, Drawable *
+ static void fill_mask(DisplayChannel *display_channel, QMask *mask, Drawable *drawable)
+ {
+     if (mask->bitmap) {
+-        if (display_channel->base.worker->image_compression != IMAGE_COMPRESS_OFF) {
+-            image_compression_t save_img_comp = display_channel->base.worker->image_compression;
+-            display_channel->base.worker->image_compression = IMAGE_COMPRESS_OFF;
++        if (display_channel->base.worker->image_compression != SPICE_IMAGE_COMPRESS_OFF) {
++            spice_image_compression_t save_img_comp =
++                display_channel->base.worker->image_compression;
++            display_channel->base.worker->image_compression = SPICE_IMAGE_COMPRESS_OFF;
+             fill_bits(display_channel, &mask->bitmap, drawable);
+             display_channel->base.worker->image_compression = save_img_comp;
+         } else {
+@@ -8301,24 +8303,25 @@ static void handle_dev_input(EventListener *listener, uint32_t events)
+         red_migrate_cursor(worker);
+         break;
+     case RED_WORKER_MESSAGE_SET_COMPRESSION:
+-        receive_data(worker->channel, &worker->image_compression, sizeof(image_compression_t));
++        receive_data(worker->channel, &worker->image_compression,
++                     sizeof(spice_image_compression_t));
+         switch (worker->image_compression) {
+-        case IMAGE_COMPRESS_AUTO_LZ:
++        case SPICE_IMAGE_COMPRESS_AUTO_LZ:
+             red_printf("ic auto_lz");
+             break;
+-        case IMAGE_COMPRESS_AUTO_GLZ:
++        case SPICE_IMAGE_COMPRESS_AUTO_GLZ:
+             red_printf("ic auto_glz");
+             break;
+-        case IMAGE_COMPRESS_QUIC:
++        case SPICE_IMAGE_COMPRESS_QUIC:
+             red_printf("ic quic");
+             break;
+-        case IMAGE_COMPRESS_LZ:
++        case SPICE_IMAGE_COMPRESS_LZ:
+             red_printf("ic lz");
+             break;
+-        case IMAGE_COMPRESS_GLZ:
++        case SPICE_IMAGE_COMPRESS_GLZ:
+             red_printf("ic glz");
+             break;
+-        case IMAGE_COMPRESS_OFF:
++        case SPICE_IMAGE_COMPRESS_OFF:
+             red_printf("ic off");
+             break;
+         default:
+diff --git a/server/red_worker.h b/server/red_worker.h
+index 097d454..8f9ea4b 100644
+--- a/server/red_worker.h
++++ b/server/red_worker.h
+@@ -82,7 +82,7 @@ typedef struct WorkerInitData {
+     uint32_t *pending;
+     uint32_t num_renderers;
+     uint32_t renderers[RED_MAX_RENDERERS];
+-    image_compression_t image_compression;
++    spice_image_compression_t image_compression;
+     int streaming_video;
+ } WorkerInitData;
+
+diff --git a/server/reds.c b/server/reds.c
+index cbea17c..bbc5644 100644
+--- a/server/reds.c
++++ b/server/reds.c
+@@ -83,7 +83,7 @@ static int ticketing_enabled = 1; //Ticketing is enabled by default
+ static pthread_mutex_t *lock_cs;
+ static long *lock_count;
+ uint32_t streaming_video = STREAM_VIDEO_FILTER;
+-image_compression_t image_compression = IMAGE_COMPRESS_AUTO_GLZ;
++spice_image_compression_t image_compression = SPICE_IMAGE_COMPRESS_AUTO_GLZ;
+ int agent_mouse = TRUE;
+
+ static void openssl_init();
+@@ -3604,25 +3604,25 @@ static void reds_do_info_spice()
+     }
+     core->term_printf(core, " ticketing=%s", ticketing_enabled ? "on" : "off");
+     switch (image_compression) {
+-    case IMAGE_COMPRESS_AUTO_GLZ:
++    case SPICE_IMAGE_COMPRESS_AUTO_GLZ:
+         core->term_printf(core, " ic=auto_glz");
+         break;
+-    case IMAGE_COMPRESS_AUTO_LZ:
++    case SPICE_IMAGE_COMPRESS_AUTO_LZ:
+         core->term_printf(core, " ic=auto_lz");
+         break;
+-    case IMAGE_COMPRESS_QUIC:
++    case SPICE_IMAGE_COMPRESS_QUIC:
+         core->term_printf(core, " ic=quic");
+         break;
+-    case IMAGE_COMPRESS_LZ:
++    case SPICE_IMAGE_COMPRESS_LZ:
+         core->term_printf(core, " ic=lz");
+         break;
+-    case IMAGE_COMPRESS_GLZ:
++    case SPICE_IMAGE_COMPRESS_GLZ:
+         core->term_printf(core, " ic=glz");
+         break;
+-    case IMAGE_COMPRESS_OFF:
++    case SPICE_IMAGE_COMPRESS_OFF:
+         core->term_printf(core, " ic=off");
+         break;
+-    case IMAGE_COMPRESS_INVALID:
++    case SPICE_IMAGE_COMPRESS_INVALID:
+     default:
+         core->term_printf(core, " ic=invalid");
+     }
+@@ -3646,7 +3646,7 @@ static void reds_do_info_spice()
+                       snd_get_playback_compression() ? "on" : "off");
+ }
+
+-static void set_image_compression(image_compression_t val)
++static void set_image_compression(spice_image_compression_t val)
+ {
+     if (val == image_compression) {
+         return;
+@@ -3655,28 +3655,28 @@ static void set_image_compression(image_compression_t val)
+     red_dispatcher_on_ic_change();
+ }
+
+-static image_compression_t reds_get_image_compression(const char *val)
++static spice_image_compression_t reds_get_image_compression(const char *val)
+ {
+     if ((strcmp(val, "on") == 0) || (strcmp(val, "auto_glz") == 0)) {
+-        return IMAGE_COMPRESS_AUTO_GLZ;
++        return SPICE_IMAGE_COMPRESS_AUTO_GLZ;
+     } else if (strcmp(val, "auto_lz") == 0) {
+-        return IMAGE_COMPRESS_AUTO_LZ;
++        return SPICE_IMAGE_COMPRESS_AUTO_LZ;
+     } else if (strcmp(val, "quic") == 0) {
+-        return IMAGE_COMPRESS_QUIC;
++        return SPICE_IMAGE_COMPRESS_QUIC;
+     } else if (strcmp(val, "glz") == 0) {
+-        return IMAGE_COMPRESS_GLZ;
++        return SPICE_IMAGE_COMPRESS_GLZ;
+     } else if (strcmp(val, "lz") == 0) {
+-        return IMAGE_COMPRESS_LZ;
++        return SPICE_IMAGE_COMPRESS_LZ;
+     } else if (strcmp(val, "off") == 0) {
+-        return IMAGE_COMPRESS_OFF;
++        return SPICE_IMAGE_COMPRESS_OFF;
+     }
+-    return IMAGE_COMPRESS_INVALID;
++    return SPICE_IMAGE_COMPRESS_INVALID;
+ }
+
+ static void reds_do_set_image_compression(const char *val)
+ {
+-    image_compression_t real_val = reds_get_image_compression(val);
+-    if (real_val == IMAGE_COMPRESS_INVALID) {
++    spice_image_compression_t real_val = reds_get_image_compression(val);
++    if (real_val == SPICE_IMAGE_COMPRESS_INVALID) {
+         core->term_printf(core, "bad image compression arg\n");
+         return;
+     }
+@@ -3988,7 +3988,7 @@ int __attribute__ ((visibility ("default"))) spice_parse_args(const char *in_arg
+                 goto error;
+             }
+             image_compression = reds_get_image_compression(val);
+-            if (image_compression == IMAGE_COMPRESS_INVALID) {
++            if (image_compression == SPICE_IMAGE_COMPRESS_INVALID) {
+                 goto error;
+             }
+             break;
+diff --git a/server/spice.h b/server/spice.h
+index be0df42..39fadc9 100644
+--- a/server/spice.h
++++ b/server/spice.h
+@@ -49,4 +49,14 @@ int spice_server_add_interface(SpiceServer *s, VDInterface *interface);
+ int spice_server_remove_interface(SpiceServer *s, VDInterface *interface);
+ int spice_server_kbd_leds(SpiceServer *s, KeyboardInterface *kbd, int leds);
+
++typedef enum {
++    SPICE_IMAGE_COMPRESS_INVALID  = 0,
++    SPICE_IMAGE_COMPRESS_OFF      = 1,
++    SPICE_IMAGE_COMPRESS_AUTO_GLZ = 2,
++    SPICE_IMAGE_COMPRESS_AUTO_LZ  = 3,
++    SPICE_IMAGE_COMPRESS_QUIC     = 4,
++    SPICE_IMAGE_COMPRESS_GLZ      = 5,
++    SPICE_IMAGE_COMPRESS_LZ       = 6,
++} spice_image_compression_t;
++
+ #endif
+-- 
+1.6.6.1
+

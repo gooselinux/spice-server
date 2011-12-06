@@ -1,0 +1,28 @@
+From af57e21860ae2ad04a5ea4c551f843adceb609bf Mon Sep 17 00:00:00 2001
+From: Yonit Halperin <yhalperi@redhat.com>
+Date: Sun, 21 Mar 2010 15:36:49 +0200
+Subject: [PATCH] server: fix wrong access to ring item, #575556
+
+---
+ server/red_worker.c |    5 +++++
+ 1 files changed, 5 insertions(+), 0 deletions(-)
+
+diff --git a/server/red_worker.c b/server/red_worker.c
+index 2b7416d..1495152 100644
+--- a/server/red_worker.c
++++ b/server/red_worker.c
+@@ -1266,6 +1266,11 @@ static void red_pipe_clear_device_resources(RedChannel *channel)
+             channel->pipe_size--;
+             break;
+         }
++
++        if (!item) {
++            // the released item was the head of the pipe
++            item = (PipeItem *)ring;
++        }
+     }
+ }
+
+-- 
+1.6.6.1
+
